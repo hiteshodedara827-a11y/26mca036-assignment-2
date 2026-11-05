@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sort Lab — Sorting Visualizer</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero"><h1>Sorting, made visible.</h1><p>Choose an algorithm and watch it arrange the numbers.</p></section>
+
+    <div class="layout">
+      <section class="card">
+        <div class="controls">
+          <div class="field"><label>CHOOSE ALGORITHM</label><div class="algorithm-picker">
+            <button class="algorithm-button active" data-sort="bubble">Bubble</button>
+            <button class="algorithm-button" data-sort="selection">Selection</button>
+            <button class="algorithm-button" data-sort="insertion">Insertion</button>
+          </div></div>
+          <div class="field"><label for="custom-array">YOUR ARRAY <span class="small-label">(comma-separated)</span></label><div class="array-entry"><input id="custom-array" placeholder="e.g. 8, 3, 6, 1, 5"><button id="apply-array" class="btn">Apply</button></div></div>
+          <button id="randomize" class="btn">↻ Randomize</button>
+        </div>
+
+        <div class="button-row"><button id="start" class="btn primary">▶ &nbsp;Start sorting</button><button id="pause" class="btn" disabled>Ⅱ &nbsp;Pause</button><button id="reset" class="btn">⟲ &nbsp;Reset</button></div>
+        <div class="speed-control"><label for="speed">Animation speed: <strong id="speed-label">Medium</strong></label><input id="speed" type="range" min="1" max="10" value="6"><div class="speed-hint"><span>Slower</span><span>Faster</span></div></div>
+        <div class="stage"><div class="stage-top"><span>ARRAY VISUALIZATION</span><span class="status"><i class="dot"></i><span id="status">Ready to sort</span></span></div><div id="bars" class="bars"></div><div class="legend"><span><i class="swatch"></i>Unsorted</span><span><i class="swatch compare"></i>Comparing</span><span><i class="swatch sorted"></i>Sorted</span></div></div>
+        <div class="stats"><div class="stat"><div class="stat-label">Comparisons</div><div id="comparisons" class="stat-value">0</div></div><div class="stat"><div class="stat-label">Swaps / moves</div><div id="moves" class="stat-value">0</div></div><div class="stat"><div class="stat-label">Array size</div><div id="size" class="stat-value">20</div></div></div>
+      </section>
+
+      <aside class="side">
+        <section class="card info-card"><div class="info-head"><h2 id="algorithm-title">Bubble Sort</h2></div><p id="algorithm-description" class="description">Compare neighbors and swap them when they are in the wrong order.</p><table class="complexity"><thead><tr><th>CASE</th><th>TIME</th></tr></thead><tbody><tr><td>Best</td><td id="best">O(n)</td></tr><tr><td>Average</td><td id="average">O(n²)</td></tr><tr><td>Worst</td><td id="worst">O(n²)</td></tr></tbody></table></section>
+        <section class="card info-card"><div class="info-head"><h2>How to use</h2></div><ol class="steps"><li>Choose a sort.</li><li>Enter numbers or randomize.</li><li>Start, pause, or reset.</li></ol></section>
+      </aside>
+    </div>
+    <footer>Built with HTML, CSS &amp; JavaScript · No libraries required<br>Keep <strong>index.html</strong> and <strong>style.css</strong> in the same folder.</footer>
+  </main>
+
+  <script>
+    // The numbers currently shown in the bars.
+    let numbers = [36, 18, 52, 9, 44, 27, 61, 13, 31, 7, 48, 22, 56, 15, 39, 4, 33, 25, 59, 11];
+    let startingNumbers = numbers.slice();
+    let sortName = "bubble";
+    let comparisons = 0;
+    let moves = 0;
+    let running = false;
+    let paused = false;
+    let stop = false;
+
+    function showBars(a, b, swapping) {
+      let largest = numbers[0];
+      for (let i = 1; i < numbers.length; i++) if (numbers[i] > largest) largest = numbers[i];
+      let area = document.getElementById("bars");
+      area.innerHTML = "";
+      for (let i = 0; i < numbers.length; i++) {
+        let wrap = document.createElement("div");
+        wrap.className = "bar-wrap";
+        let bar = document.createElement("div");
+        bar.className = "bar";
+        bar.style.height = (numbers[i] / largest * 88) + "%";
+        if (i === a || i === b) bar.classList.add(swapping ? "is-swap" : "is-compare");
+        let label = document.createElement("span");
+        label.className = "bar-value";
+        label.textContent = numbers[i];
+        wrap.append(bar, label);
+        area.append(wrap);
+      }
+      document.getElementById("size").textContent = numbers.length;
+    }
+
+    function wait() {
+      return new Promise(function (done) {
+        function check() {
+          if (stop) { done(false); return; }
+          if (paused) { setTimeout(check, 100); return; }
+          let time = 1600 - Number(document.getElementById("speed").value) * 150;
+          setTimeout(function () { done(!stop); }, time);
+        }
+        check();
+      });
+    }
+
+    // Slides bars a and b past each other, then swaps them in the array.
+    // Returns false if the sort was reset while animating.
+    function animateSwap(a, b) {
+      return new Promise(function (done) {
+        showBars(a, b);
+        let wraps = document.getElementById("bars").children;
+        let first = wraps[a];
+        let second = wraps[b];
+        let distance = second.offsetLeft - first.offsetLeft;
+        let speed = Number(document.getElementById("speed").value);
+        let gap = Math.abs(b - a);
+        let duration = Math.max(200, (1600 - speed * 150) * 0.8) * (gap > 1 ? 1 + Math.min(gap, 10) * 0.08 : 1);
+        first.style.zIndex = 3;
+        second.style.zIndex = 3;
+        first.style.transition = "transform " + duration + "ms ease-in-out";
+        second.style.transition = "transform " + duration + "ms ease-in-out";
+        first.getBoundingClientRect(); // force layout so the transition runs
+        first.style.transform = "translateX(" + distance + "px)";
+        second.style.transform = "translateX(" + (-distance) + "px)";
+        setTimeout(function () {
+          if (stop) { done(false); return; }
+          let temp = numbers[a];
+          numbers[a] = numbers[b];
+          numbers[b] = temp;
+          showBars(a, b);
+          done(true);
+        }, duration + 40);
+      });
+    }
+
+    function countComparison() {
+      comparisons++;
+      document.getElementById("comparisons").textContent = comparisons;
+    }
+
+    function countMove() {
+      moves++;
+      document.getElementById("moves").textContent = moves;
+    }
+
+    async function bubbleSort() {
+      for (let end = numbers.length - 1; end > 0; end--) {
+        for (let i = 0; i < end; i++) {
+          if (!await wait()) return;
+          countComparison();
+          showBars(i, i + 1);
+          if (numbers[i] > numbers[i + 1]) {
+            if (!await animateSwap(i, i + 1)) return;
+            countMove();
+          }
+        }
+      }
+    }
+
+    async function selectionSort() {
+      for (let start = 0; start < numbers.length - 1; start++) {
+        let smallest = start;
+        for (let i = start + 1; i < numbers.length; i++) {
+          if (!await wait()) return;
+          countComparison();
+          showBars(smallest, i);
+          if (numbers[i] < numbers[smallest]) smallest = i;
+        }
+        if (smallest !== start) {
+          if (!await animateSwap(start, smallest)) return;
+          countMove();
+        }
+      }
+    }
+
+    async function insertionSort() {
+      for (let i = 1; i < numbers.length; i++) {
+        let place = i;
+        while (place > 0) {
+          if (!await wait()) return;
+          countComparison();
+          showBars(place - 1, place);
+          if (numbers[place - 1] <= numbers[place]) break;
+          if (!await animateSwap(place - 1, place)) return;
+          countMove();
+          place--;
+        }
+      }
+    }
+
+    async function startSort() {
+      if (running) return;
+      running = true;
+      paused = false;
+      stop = false;
+      comparisons = 0;
+      moves = 0;
+      document.getElementById("comparisons").textContent = 0;
+      document.getElementById("moves").textContent = 0;
+      document.getElementById("status").textContent = "Sorting...";
+      document.getElementById("start").disabled = true;
+      document.getElementById("pause").disabled = false;
+      if (sortName === "bubble") await bubbleSort();
+      if (sortName === "selection") await selectionSort();
+      if (sortName === "insertion") await insertionSort();
+      let wasReset = stop;
+      running = false;
+      paused = false;
+      stop = false;
+      document.getElementById("start").disabled = false;
+      document.getElementById("pause").disabled = true;
+      document.getElementById("pause").textContent = "Ⅱ  Pause";
+      document.getElementById("status").textContent = wasReset ? "Ready to sort" : "Sorting complete";
+      showBars(-1, -1);
+    }
+
+    function changeArray(newNumbers) {
+      numbers = newNumbers.slice();
+      startingNumbers = newNumbers.slice();
+      comparisons = 0;
+      moves = 0;
+      document.getElementById("comparisons").textContent = 0;
+      document.getElementById("moves").textContent = 0;
+      document.getElementById("status").textContent = "Ready to sort";
+      showBars(-1, -1);
+    }
+
+    document.querySelectorAll(".algorithm-button").forEach(function (button) {
+      button.onclick = function () {
+        if (running) return;
+        document.querySelectorAll(".algorithm-button").forEach(function (item) { item.classList.remove("active"); });
+        button.classList.add("active");
+        sortName = button.dataset.sort;
+        let names = { bubble: "Bubble Sort", selection: "Selection Sort", insertion: "Insertion Sort" };
+        let descriptions = {
+          bubble: "Compare neighbors and swap them when they are in the wrong order.",
+          selection: "Find the smallest number and move it to the front.",
+          insertion: "Take each number and insert it into its correct place."
+        };
+        let bestTimes = { bubble: "O(n)", selection: "O(n²)", insertion: "O(n)" };
+        let averageTimes = { bubble: "O(n²)", selection: "O(n²)", insertion: "O(n²)" };
+        let worstTimes = { bubble: "O(n²)", selection: "O(n²)", insertion: "O(n²)" };
+        document.getElementById("algorithm-title").textContent = names[sortName];
+        document.getElementById("algorithm-description").textContent = descriptions[sortName];
+        document.getElementById("best").textContent = bestTimes[sortName];
+        document.getElementById("average").textContent = averageTimes[sortName];
+        document.getElementById("worst").textContent = worstTimes[sortName];
+      };
+    });
+
+    document.getElementById("start").onclick = startSort;
+    document.getElementById("pause").onclick = function () {
+      paused = !paused;
+      document.getElementById("pause").textContent = paused ? "▶  Resume" : "Ⅱ  Pause";
+      document.getElementById("status").textContent = paused ? "Paused" : "Sorting...";
+    };
+    document.getElementById("reset").onclick = function () {
+      stop = true;
+      paused = false;
+      numbers = startingNumbers.slice();
+      comparisons = 0;
+      moves = 0;
+      document.getElementById("comparisons").textContent = 0;
+      document.getElementById("moves").textContent = 0;
+      document.getElementById("status").textContent = "Ready to sort";
+      showBars(-1, -1);
+    };
+    document.getElementById("randomize").onclick = function () {
+      if (running) return;
+      let randomNumbers = [];
+      for (let i = 0; i < 20; i++) randomNumbers.push(5 + Math.floor(Math.random() * 96));
+      changeArray(randomNumbers);
+    };
+    document.getElementById("apply-array").onclick = function () {
+      if (running) return;
+      let parts = document.getElementById("custom-array").value.split(",");
+      let enteredNumbers = [];
+      for (let i = 0; i < parts.length; i++) {
+        let number = Number(parts[i].trim());
+        if (parts[i].trim() === "" || !Number.isInteger(number)) {
+          document.getElementById("status").textContent = "Enter whole numbers separated by commas";
+          return;
+        }
+        enteredNumbers.push(number);
+      }
+      if (enteredNumbers.length < 2 || enteredNumbers.length > 60) {
+        document.getElementById("status").textContent = "Enter between 2 and 60 numbers";
+        return;
+      }
+      changeArray(enteredNumbers);
+    };
+    document.getElementById("speed").oninput = function () {
+      let speed = Number(this.value);
+      document.getElementById("speed-label").textContent = speed < 4 ? "Slow" : speed < 8 ? "Medium" : "Fast";
+    };
+
+    showBars(-1, -1);
+  </script>
+</body>
+</html>
